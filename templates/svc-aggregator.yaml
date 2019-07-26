@@ -1,0 +1,23 @@
+{{- if .Values.config.aggregator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "clickhouse.fullname" . }}
+  labels:
+    app: {{ include "clickhouse.name" . }}
+    chart: {{ include "clickhouse.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  {{- range $key, $port := .Values.ports }}
+    - name: {{ $key }}
+      port: {{ $port.containerPort }}
+      targetPort: {{ $port.name }}
+      protocol: {{ $port.protocol }}
+  {{- end }}
+  selector:
+    app: {{ include "clickhouse.name" . }}
+    release: {{ .Release.Name }}
+{{- end }}

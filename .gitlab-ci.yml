@@ -1,0 +1,3 @@
+include:
+  - project: 'base/gitlab-ci-common'
+    file: 'charts.yml'

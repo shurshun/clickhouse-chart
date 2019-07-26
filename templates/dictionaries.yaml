@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "clickhouse.fullname" . }}-dictionaries
+  labels:
+    app: {{ template "clickhouse.name" . }}
+    chart: {{ template "clickhouse.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    addonmanager.kubernetes.io/mode: Reconcile
+data:
+{{- range $name, $data := .Values.dictionaries }}
+  {{ $name }}: |
+{{ $data | indent 4 }}
+{{- end }}

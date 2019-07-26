@@ -1,0 +1,90 @@
+{{- $fullName := include "clickhouse.fullname" . -}}
+{{- $name := include "clickhouse.name" . -}}
+{{- $chart := include "clickhouse.chart" . -}}
+{{- $cron := .Values.backup.cron -}}
+{{- $shardCount := .Values.config.replication.shard.count | int -}}
+{{- $shardSize := .Values.config.replication.shard.size | int -}}
+{{- if .Values.backup.enabled }}
+{{- range $shard := untilStep 0 ($shardCount | int ) 1 }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-backup-shard-{{ $shard }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}-backup-shard-{{ $shard }}
+    helm.sh/chart: {{ $chart }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+spec:
+  schedule: {{ $cron.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ $cron.successfulJobsHistoryLimit | default 3 }}
+  successfulJobsHistoryLimit: {{ $cron.failedJobsHistoryLimit | default 3 }}
+  suspend: false
+  startingDeadlineSeconds: {{ $cron.startingDeadlineSeconds | default 60 }}
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ $name }}-backup-shard-{{ $shard }}
+            app.kubernetes.io/instance: {{ $.Release.Name }}
+          {{- with $.Values.podLabels}}
+{{ toYaml . | indent 12 }}
+          {{- end }}
+          annotations:
+          {{- with $.Values.podAnnotations}}
+{{ toYaml . | indent 12 }}
+          {{- end }}
+        spec:
+          restartPolicy: {{ $cron.restartPolicy | default "OnFailure" }}
+          volumes:
+            - name: config
+              configMap:
+                name: {{ $fullName }}-backup
+            - name: data
+              persistentVolumeClaim:
+                claimName: data-{{ $fullName }}-{{ mul ($shard | int) ($shardSize | int) }}
+          containers:
+          - name: backup
+          {{- with $.Values.backup.image }}
+            image: "{{ .repository }}:{{ .tag }}"
+            imagePullPolicy: {{ .pullPolicy }}
+          {{- end }}
+{{- with $.Values.backup.command }}
+            command:
+{{ toYaml . | indent 14 }}
+{{- end }}
+{{- with $.Values.backup.args }}
+            args:
+{{ toYaml . | indent 14 }}
+{{- end }}
+            env:
+  {{- range $key, $value := $.Values.env.raw }}
+              - name: {{ $key }}
+                value: {{ $value | toString | quote }}
+  {{- end }}
+              - name: CLICKHOUSE_HOST
+                value: clickhouse-{{ mul ($shard | int) ($shardSize | int) }}
+              - name: S3_PATH
+                value: clickhouse-{{ mul ($shard | int) ($shardSize | int) }}
+            volumeMounts:
+              - name: config
+                mountPath: /etc/clickhouse-backup
+                readOnly: true
+              - name: data
+                mountPath: /var/lib/clickhouse
+    {{- with $.Values.backup.resources }}
+            resources:
+{{ toYaml . | indent 12 }}
+    {{- end }}
+    {{- with $.Values.nodeSelector }}
+          nodeSelector:
+{{ toYaml . | indent 12 }}
+    {{- end }}
+    {{- with $.Values.tolerations }}
+          tolerations:
+{{ toYaml . | indent 12 }}
+    {{- end }}
+---
+{{- end }}
+{{- end }}

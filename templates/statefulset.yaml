@@ -1,0 +1,199 @@
+apiVersion: apps/v1beta2
+kind: StatefulSet
+metadata:
+  name: {{ template "clickhouse.fullname" . }}
+  labels:
+    app: {{ include "clickhouse.name" . }}
+    chart: {{ template "clickhouse.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    component: clickhouse
+spec:
+  serviceName: {{ template "clickhouse.fullname" . }}
+  replicas: {{ template "clickhouse.replicas" . }}
+  selector:
+    matchLabels:
+      app: {{ include "clickhouse.name" . }}
+      release: {{ .Release.Name }}
+      component: clickhouse
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+{{- with .Values.updateStrategy }}
+  updateStrategy:
+{{ toYaml . | indent 4 }}
+{{- end }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "clickhouse.name" . }}
+        release: {{ .Release.Name }}
+        component: clickhouse
+      {{- with .Values.podLabels }}
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- if .Values.metrics.enabled }}
+        prometheus.io/scrape: "true"
+      {{- end }}
+      annotations:
+      {{- if .Values.dictionaries }}
+        checksum/dictionaries: {{ include (print $.Template.BasePath "/dictionaries.yaml") . | sha256sum }}
+      {{- end }}
+      {{- if .Values.initdb }}
+        checksum/initdb: {{ include (print $.Template.BasePath "/initdb.yaml") . | sha256sum }}
+      {{- end }}
+      {{- if .Values.env.secret }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+      {{- end }}
+      {{- with .Values.podAnnotations }}
+{{ toYaml . | indent 8 }}
+      {{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      initContainers:
+        - name: chown-data-dir
+          image: alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - chown 101:101 -R /var/lib/clickhouse
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+          securityContext:
+            runAsUser: 0
+      containers:
+        - name: clickhouse
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.PullPolicy }}
+          command:
+            - bash
+            - '-ec'
+            - >
+              ID=${HOSTNAME##*-}
+
+              export SHARD=$((ID/2))
+              export REPLICA=$((ID%2))
+
+              /entrypoint.sh
+          ports:
+{{- range $key, $port := .Values.ports }}
+            - name: {{ $key }}
+              containerPort: {{ $port.containerPort }}
+{{- end }}
+          env:
+            - name: CLICKHOUSE_CONFIG
+              value: /etc/clickhouse-server/conf.d/config.xml
+        {{- with .Values.env.raw }}
+          {{- range $key, $value := . }}
+            - name: {{ $key }}
+              value: {{ $value | toString | quote }}
+          {{- end }}
+        {{- end }}
+        {{- if .Values.env.secret }}
+          envFrom:
+            - secretRef:
+                name: {{ template "clickhouse.fullname" . }}
+        {{- end }}
+          livenessProbe:
+            timeoutSeconds: 1
+            initialDelaySeconds: 30
+            tcpSocket:
+              port: 9000
+          readinessProbe:
+            timeoutSeconds: 1
+            initialDelaySeconds: 30
+            tcpSocket:
+              port: 9000
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: confd
+              mountPath: /etc/clickhouse-server/conf.d
+            - name: dictionaries
+              mountPath: /etc/clickhouse-server/dictionaries
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+{{- if .Values.metrics.enabled }}
+        - name: clickhouse-exporter
+          image: "{{ .Values.metrics.image.repository }}:{{ .Values.metrics.image.tag }}"
+          imagePullPolicy: {{ .Values.metrics.image.PullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+          env:
+            - name: CLICKHOUSE_USER
+              value: metrics
+            - name: CLICKHOUSE_PASSWORD
+              value: metrics
+          args:
+            - -scrape_uri=http://127.0.0.1:8123/
+{{- end }}
+      volumes:
+        - name: data
+{{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: data
+{{- else }}
+          emptyDir: {}
+{{- end }}
+        - name: initdb
+          configMap:
+            name: {{ template "clickhouse.fullname" . }}-initdb
+        - name: confd
+          configMap:
+            name: {{ template "clickhouse.fullname" . }}
+        - name: dictionaries
+          configMap:
+            name: {{ template "clickhouse.fullname" . }}-dictionaries
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- if .Values.affinity }}
+      affinity:
+{{ tpl .Values.affinity . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        namespace: {{ .Release.Namespace }}
+        labels:
+          app: {{ include "clickhouse.name" . }}
+          chart: {{ template "clickhouse.chart" . }}
+          release: {{ .Release.Name }}
+          heritage: {{ .Release.Service }}
+        {{- with .Values.persistence.annotations  }}
+          annotations:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+        {{- with .Values.persistence.finalizers  }}
+          finalizers:
+{{ toYaml . | indent 12 }}
+        {{- end }}
+      spec:
+      {{- with .Values.persistence.reclaimPolicy }}
+        persistentVolumeReclaimPolicy: {{ . | quote }}
+      {{- end}}
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+      {{- if .Values.persistence.storageClass }}
+        {{- if (eq "-" .Values.persistence.storageClass) }}
+        storageClassName: ""
+        {{- else }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
+      {{- end }}
+{{- end }}

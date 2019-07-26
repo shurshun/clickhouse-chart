@@ -1,0 +1,15 @@
+{{- if .Values.backup.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "clickhouse.fullname" . }}-backup
+  labels:
+    app: {{ template "clickhouse.name" . }}
+    chart: {{ template "clickhouse.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    addonmanager.kubernetes.io/mode: Reconcile
+data:
+  config.yml: |
+{{ toYaml .Values.backup.config | indent 4 }}
+{{- end }}

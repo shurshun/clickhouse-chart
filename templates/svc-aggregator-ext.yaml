@@ -1,0 +1,26 @@
+{{- if and .Values.config.aggregator.enabled .Values.config.aggregator.nodeport }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "clickhouse.fullname" . }}-ext
+  labels:
+    app: {{ template "clickhouse.name" . }}
+    chart: {{ template "clickhouse.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  type: NodePort
+  ports:
+  {{- range $key, $port := .Values.ports }}
+    - name: {{ $key }}
+      port: {{ $port.containerPort }}
+    {{- if $port.nodePort }}
+      nodePort: {{ $port.nodePort }}
+    {{- end }}
+      targetPort: {{ $port.name }}
+      protocol: {{ $port.protocol }}
+  {{- end }}
+  selector:
+    app: {{ include "clickhouse.name" . }}
+    release: {{ .Release.Name }}
+{{- end }}

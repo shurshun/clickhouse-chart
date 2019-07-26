@@ -1,0 +1,15 @@
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ template "clickhouse.fullname" . }}
+  labels:
+    app: {{ template "clickhouse.name" . }}
+    chart: {{ template "clickhouse.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: {{ include "clickhouse.name" . }}
+      release: {{ .Release.Name }}

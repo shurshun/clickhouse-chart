@@ -1,0 +1,152 @@
+<yandex>
+  <logger>
+    <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+    <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+    <level>{{ .Values.config.log_level | toString }}</level>
+    <console>1</console>
+  </logger>
+  <http_port>8123</http_port>
+  <tcp_port>9000</tcp_port>
+  <interserver_http_port>9009</interserver_http_port>
+  <interserver_http_host from_env="HOSTNAME"/>
+  <listen_host>0.0.0.0</listen_host>
+  <path>/var/lib/clickhouse/</path>
+  <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+  <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+  <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+  <default_profile>default</default_profile>
+  <default_database>default</default_database>
+  <umask>022</umask>
+  <include_from>/etc/clickhouse-server/conf.d/metrica.xml</include_from>
+  <remote_servers>
+    <{{ .Values.config.cluster_name }}>
+    {{- with $repl := .Values.config.replication }}
+    {{- $totalNodes := mul ($repl.shard.count | int) ($repl.shard.size | int) }}
+    {{- range $i, $e := until ($totalNodes | int) }}
+    {{- if eq (mod $i (div ($totalNodes | int) ($repl.shard.count | int))) 0 }}
+      <shard>
+        <internal_replication>{{ $repl.internal }}</internal_replication>
+    {{- end }}
+        <replica>
+          <host>clickhouse-{{ $i }}</host>
+          <port>9000</port>
+          <user>{{ $repl.user }}</user>
+          <password>{{ $repl.pass }}</password>
+        </replica>
+    {{- if eq (mod $i (div ($totalNodes | int) ($repl.shard.count | int))) 1 }}
+      </shard>
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    </{{ .Values.config.cluster_name }}>
+  </remote_servers>
+  <zookeeper>
+{{- range $i, $e := until (.Values.config.zookeeper.nodes | int) }}
+      <node index="{{ $i }}">
+        {{- with $.Values.config.zookeeper }}
+          <host>{{ .name }}-{{ $i }}.{{ .name }}-headless</host>
+          <port>{{ .port }}</port>
+        {{- end }}
+      </node>
+{{- end }}
+  </zookeeper>
+  <profiles>
+{{- range $key, $values := .Values.config.profiles }}
+    <{{ $key }}>
+      {{- range $k, $v :=  $values }}
+      <{{ $k }}>{{ $v }}</{{ $k }}>
+      {{- end }}
+    </{{ $key }}>
+{{- end }}
+    <readonly>
+      <readonly>1</readonly>
+    </readonly>
+    <replication>
+      <readonly>0</readonly>
+    </replication>
+  </profiles>
+  <users>
+{{- range $key, $values := .Values.config.users }}
+    <{{ $key }}>
+      {{- range $k, $v :=  $values }}
+      {{- if eq $k "password" }}
+      <password_sha256_hex>{{ $v | sha256sum }}</password_sha256_hex>
+      {{ else }}<{{ $k }}>{{ $v }}</{{ $k }}>{{ end }}
+      {{- end }}
+      <networks>
+        <ip>::/0</ip>
+      </networks>
+    </{{ $key }}>
+    <{{ $.Values.config.replication.user }}>
+      <password_sha256_hex>{{ $.Values.config.replication.pass | sha256sum }}</password_sha256_hex>
+      <profile>replication</profile>
+      <quota>replication</quota>
+      <networks>
+        <ip>::/0</ip>
+      </networks>
+    </{{ $.Values.config.replication.user }}>
+{{- if $.Values.metrics.enabled }}
+    <metrics>
+      <password>metrics</password>
+      <profile>readonly</profile>
+      <quota>default</quota>
+      <networks>
+        <ip>127.0.0.1</ip>
+      </networks>
+    </metrics>
+{{- end }}
+{{- end }}
+  </users>
+  <quotas>
+    <default>
+      <interval>
+        <duration>3600</duration>
+        <queries>0</queries>
+        <errors>0</errors>
+        <result_rows>0</result_rows>
+        <read_rows>0</read_rows>
+        <execution_time>0</execution_time>
+      </interval>
+    </default>
+    <replication>
+      <interval>
+        <duration>3600</duration>
+        <queries>0</queries>
+        <errors>0</errors>
+        <result_rows>0</result_rows>
+        <read_rows>0</read_rows>
+        <execution_time>0</execution_time>
+      </interval>
+    </replication>
+  </quotas>
+    <!-- Allow to execute distributed DDL queries (CREATE, DROP, ALTER, RENAME) on cluster.
+  Works only if ZooKeeper is enabled. Comment it if such functionality isn't required. -->
+  <distributed_ddl>
+      <!-- Path in ZooKeeper to queue with DDL queries -->
+      <path>/clickhouse/task_queue/ddl</path>
+      <!-- Settings from this profile will be used to execute DDL queries -->
+      <!--<profile>replication</profile> -->
+  </distributed_ddl>
+  <macros incl="macros" optional="true"/>
+  <query_log>
+    <database>system</database>
+    <table>query_log</table>
+    <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+  </query_log>
+  <dictionaries_config>/etc/clickhouse-server/dictionaries/*_dictionary.xml</dictionaries_config>
+  <compression>
+    <case>
+      <method>zstd</method>
+    </case>
+  </compression>
+{{- range $key, $value := .Values.config.options }}
+{{- with $v := $value | toString }}
+  <{{ $key }}>
+    {{- if regexMatch "[0-9]+Gi" $v }}{{ $v | replace "Gi" "" | mul 1073741824 }}
+    {{- else if regexMatch "[0-9]+Mi" $v }}{{ $v | replace "Mi" "" | mul 1048576 }}
+    {{- else }}{{ $v }}
+    {{- end -}}
+  </{{ $key }}>
+{{- end }}
+{{- end }}
+</yandex>

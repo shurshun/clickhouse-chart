@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "clickhouse.fullname" . }}
+  labels:
+    app: {{ template "clickhouse.name" . }}
+    chart: {{ template "clickhouse.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+    addonmanager.kubernetes.io/mode: Reconcile
+data:
+{{ tpl (.Files.Glob "configs/*").AsConfig . | indent 2 }}

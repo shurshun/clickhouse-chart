@@ -1,0 +1,40 @@
+{{- range $i, $e := until (include "clickhouse.replicas" . | int) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "clickhouse.fullname" $ }}-{{ $i }}
+  labels:
+    app: {{ template "clickhouse.name" $ }}
+    chart: {{ template "clickhouse.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+{{- if $.Values.metrics.enabled }}
+  annotations:
+    prometheus.io/scrape: "true"
+{{- end }}
+spec:
+  type: {{ $.Values.service.type }}
+{{- if not $.Values.config.aggregator.enabled }}
+  publishNotReadyAddresses: true
+{{- end }}
+  clusterIP: None
+  ports:
+  {{- range $key, $port := $.Values.ports }}
+    - name: {{ $key }}
+      port: {{ $port.containerPort }}
+      targetPort: {{ $port.name }}
+      protocol: {{ $port.protocol }}
+  {{- end }}
+  {{- if $.Values.metrics.enabled }}
+    - name: metrics
+      port: 9116
+      targetPort: metrics
+      protocol: TCP
+  {{- end }}
+  selector:
+    app: {{ include "clickhouse.name" $ }}
+    release: {{ $.Release.Name }}
+    statefulset.kubernetes.io/pod-name: {{ include "clickhouse.fullname" $ }}-{{ $i }}
+...
+{{- end }}
