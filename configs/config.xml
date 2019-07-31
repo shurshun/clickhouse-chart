@@ -31,8 +31,8 @@
           <user>{{ $repl.user }}</user>
           <password>{{ $repl.pass }}</password>
         </replica>
-      </shard>
     {{- end }}
+      </shard>
     {{- end }}
     {{- end }}
     </{{ .Values.config.cluster_name }}>
