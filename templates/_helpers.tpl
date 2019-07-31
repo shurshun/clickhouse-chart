@@ -34,10 +34,12 @@ Create chart name and version as used by the chart label.
 {{/*
 Set CH replicas based on type
 */}}
-{{- define "clickhouse.replicas" -}}
-{{- if .Values.config.aggregator.enabled }}
+{{- define "clickhouse.replicaCount" -}}
+{{- if .Values.config.aggregator.enabled -}}
 {{- .Values.replicaCount -}}
 {{- else -}}
-{{- mul (.Values.config.replication.shard.count | int) (.Values.config.replication.shard.size | int) -}}
+{{- $shardCount := .Values.config.replication.shard.count | toString | int -}}
+{{- $shardSize := .Values.config.replication.shard.size | toString | int -}}
+{{- mul $shardCount $shardSize -}}
 {{- end -}}
 {{- end -}}

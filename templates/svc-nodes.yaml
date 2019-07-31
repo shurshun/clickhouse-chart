@@ -1,4 +1,5 @@
-{{- range $i, $e := until (include "clickhouse.replicas" . | int) }}
+{{- if not .Values.config.aggregator.enabled }}
+{{- range $i, $e := until (include "clickhouse.replicaCount" . | int) }}
 ---
 apiVersion: v1
 kind: Service
@@ -37,4 +38,5 @@ spec:
     release: {{ $.Release.Name }}
     statefulset.kubernetes.io/pod-name: {{ include "clickhouse.fullname" $ }}-{{ $i }}
 ...
+{{- end }}
 {{- end }}

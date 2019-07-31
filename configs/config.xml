@@ -21,19 +21,16 @@
   <remote_servers>
     <{{ .Values.config.cluster_name }}>
     {{- with $repl := .Values.config.replication }}
-    {{- $totalNodes := mul ($repl.shard.count | int) ($repl.shard.size | int) }}
-    {{- range $i, $e := until ($totalNodes | int) }}
-    {{- if eq (mod $i (div ($totalNodes | int) ($repl.shard.count | int))) 0 }}
+    {{- range $s := untilStep 0 ($repl.shard.count | toString | int ) 1 }}
       <shard>
         <internal_replication>{{ $repl.internal }}</internal_replication>
-    {{- end }}
+      {{- range $i := untilStep 0 ($repl.shard.size | toString | int ) 1 }}
         <replica>
-          <host>clickhouse-{{ $i }}</host>
+          <host>clickhouse-{{ add (mul $s 2) $i }}</host>
           <port>9000</port>
           <user>{{ $repl.user }}</user>
           <password>{{ $repl.pass }}</password>
         </replica>
-    {{- if eq (mod $i (div ($totalNodes | int) ($repl.shard.count | int))) 1 }}
       </shard>
     {{- end }}
     {{- end }}
@@ -41,7 +38,7 @@
     </{{ .Values.config.cluster_name }}>
   </remote_servers>
   <zookeeper>
-{{- range $i, $e := until (.Values.config.zookeeper.nodes | int) }}
+{{- range $i := until (.Values.config.zookeeper.nodes | int) }}
       <node index="{{ $i }}">
         {{- with $.Values.config.zookeeper }}
           <host>{{ .name }}-{{ $i }}.{{ .name }}-headless</host>

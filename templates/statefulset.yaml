@@ -1,16 +1,16 @@
 apiVersion: apps/v1beta2
 kind: StatefulSet
 metadata:
-  name: {{ template "clickhouse.fullname" . }}
+  name: {{ include "clickhouse.fullname" . }}
   labels:
     app: {{ include "clickhouse.name" . }}
-    chart: {{ template "clickhouse.chart" . }}
+    chart: {{ include "clickhouse.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
     component: clickhouse
 spec:
-  serviceName: {{ template "clickhouse.fullname" . }}
-  replicas: {{ template "clickhouse.replicas" . }}
+  serviceName: {{ include "clickhouse.fullname" . }}
+  replicas: {{ include "clickhouse.replicaCount" . }}
   selector:
     matchLabels:
       app: {{ include "clickhouse.name" . }}

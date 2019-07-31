@@ -2,7 +2,7 @@ apiVersion: v1
 appVersion: 19.11.3.11
 description: ClickHouse is a free analytic DBMS for big data
 name: clickhouse
-version: 0.1.84
+version: 0.1.85
 home: https://github.com/yandex/ClickHouse
 keywords:
   - clickhouse
