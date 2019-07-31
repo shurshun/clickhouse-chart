@@ -38,7 +38,7 @@
     </{{ .Values.config.cluster_name }}>
   </remote_servers>
   <zookeeper>
-{{- range $i := until (.Values.config.zookeeper.nodes | int) }}
+{{- range $i := until (.Values.config.zookeeper.nodes | toString | int) }}
       <node index="{{ $i }}">
         {{- with $.Values.config.zookeeper }}
           <host>{{ .name }}-{{ $i }}.{{ .name }}-headless</host>
